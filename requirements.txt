@@ -4,3 +4,4 @@ pandas==2.3.0
 python-dotenv==1.1.0
 Requests==2.32.4
 scikit_learn==1.7.0
+gunicorn==21.2.0
