@@ -7,17 +7,26 @@ import requests
 from datetime import datetime
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
+from dotenv import load_dotenv
+
+# Load environment variables from .env (only for local development)
+load_dotenv()
 
 app = Flask(__name__)
 
 # Temporary storage for sensor data
 sensor_data = {}
 
-# ThingSpeak Configuration
-THINGSPEAK_API_KEY = "U8APYGOIS38JY8SU" 
-THINGSPEAK_CHANNEL_ID = "2899894"     
-THINGSPEAK_READ_KEY = "ZGSNHEY6VC3URKUH" 
-THINGSPEAK_WRITE_KEY = "U8APYGOIS38JY8SU"
+# ThingSpeak Configuration using environment variables (secured)
+THINGSPEAK_API_KEY = os.environ.get("THINGSPEAK_API_KEY", "")
+THINGSPEAK_CHANNEL_ID = os.environ.get("THINGSPEAK_CHANNEL_ID", "")
+THINGSPEAK_READ_KEY = os.environ.get("THINGSPEAK_READ_KEY", "")
+THINGSPEAK_WRITE_KEY = os.environ.get("THINGSPEAK_WRITE_KEY", "")
+
+# Confirm environment variable loading
+if not all([THINGSPEAK_API_KEY, THINGSPEAK_CHANNEL_ID, THINGSPEAK_READ_KEY, THINGSPEAK_WRITE_KEY]):
+    print("⚠️ Warning: One or more ThingSpeak environment variables are missing.")
+
 
 def load_models():
     """Load all required models and data"""
@@ -473,6 +482,7 @@ def predict():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     
+app = app
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5000, debug=True)
