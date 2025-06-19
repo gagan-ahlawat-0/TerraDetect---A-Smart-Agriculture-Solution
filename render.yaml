@@ -1,7 +1,15 @@
 services:
   - type: web
-    name: my-webapp
+    name: flask-agriculture-app
     env: python
-    buildCommand: ""
+    buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app
-
+    envVars:
+      - key: THINGSPEAK_API_KEY
+        fromDashboard: true
+      - key: THINGSPEAK_READ_KEY
+        fromDashboard: true
+      - key: THINGSPEAK_WRITE_KEY
+        fromDashboard: true
+      - key: THINGSPEAK_CHANNEL_ID
+        fromDashboard: true
