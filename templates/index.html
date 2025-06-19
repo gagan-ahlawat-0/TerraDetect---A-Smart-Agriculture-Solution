@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TerraDetect - Smart Farming Assistant</title>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <header>
+      <img
+        src="{{ url_for('static', filename='images/td-icon.jpg') }}" style="border-radius: 50%; height: 4rem; width: 4rem;"
+        alt="TerraDetect Logo"
+        class="logo"
+      />
+
+      <h1>TerraDetect</h1>
+    </header>
+
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <i class="fas fa-sliders-h"></i>
+        <h3>Controls</h3>
+      </div>
+
+      <div class="sidebar-nav">
+        <button class="sidebar-btn active" id="bestCropMode">
+          <i class="fas fa-seedling"></i> Best Crop
+        </button>
+        <button class="sidebar-btn" id="cropSuitabilityMode">
+          <i class="fas fa-check-circle"></i> Crop Suitability
+        </button>
+        <button class="sidebar-btn" id="fertilizerMode">
+          <i class="fas fa-flask"></i> Fertilizer
+        </button>
+
+        <div class="control-section">
+          <h4><i class="fas fa-cloud-sun"></i> Weather Source</h4>
+          <button class="sidebar-btn active" id="manualWeatherBtn">
+            <i class="fas fa-edit"></i> Manual Entry
+          </button>
+          <button class="sidebar-btn" id="apiWeatherBtn">
+            <i class="fas fa-cloud"></i> Weather API
+          </button>
+          <button class="sidebar-btn" id="sensorWeatherBtn">
+            <i class="fas fa-satellite-dish"></i> Fetch Sensors
+          </button>
+        </div>
+
+        <div
+          class="control-section"
+          id="sensorDataSection"
+          style="display: none"
+        >
+          <h4><i class="fas fa-microchip"></i> Sensor Data</h4>
+          <div class="sensor-data-display">
+            <p>
+              <i class="fas fa-temperature-high"></i> Temp:
+              <span id="sensorTempDisplay">--</span>°C
+            </p>
+            <p>
+              <i class="fas fa-tint"></i> Humidity:
+              <span id="sensorHumidityDisplay">--</span>%
+            </p>
+            <p>
+              <i class="fas fa-vial"></i> pH:
+              <span id="sensorPhDisplay">--</span>
+            </p>
+            <p>
+              <i class="fas fa-leaf"></i> N:
+              <span id="sensorNDisplay">--</span> ppm
+            </p>
+            <p>
+              <i class="fas fa-leaf"></i> P:
+              <span id="sensorPDisplay">--</span> ppm
+            </p>
+            <p>
+              <i class="fas fa-leaf"></i> K:
+              <span id="sensorKDisplay">--</span> ppm
+            </p>
+            <p>
+              <i class="fas fa-tint-slash"></i> Soil Moisture:
+              <span id="sensorMoistureDisplay">--</span>%
+            </p>
+            <p>
+              <i class="fas fa-bolt"></i> EC:
+              <span id="sensorECDisplay">--</span> μS/cm
+            </p>
+          </div>
+          <button
+            class="sidebar-btn"
+            id="useSensorDataBtn"
+            style="margin-top: 0.8rem"
+          >
+            <i class="fas fa-check"></i> Use This Data
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="main-content">
+      <div class="container">
+        <h2 id="formTitle">Find the Best Crop</h2>
+
+        <form id="cropForm">
+          <div class="form-group">
+            <label for="N"
+              >Nitrogen (N)
+              <span class="tooltip"
+                >ℹ️<span class="tooltiptext"
+                  >Essential for leaf growth and green color</span
+                ></span
+              ></label
+            >
+            <div class="input-unit" data-unit="ppm">
+              <input
+                type="number"
+                id="N"
+                name="N"
+                step="0.001"
+                min="0"
+                max="300"
+                required
+              />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="P"
+              >Phosphorus (P)
+              <span class="tooltip"
+                >ℹ️<span class="tooltiptext"
+                  >Important for root development and flowering</span
+                ></span
+              ></label
+            >
+            <div class="input-unit" data-unit="ppm">
+              <input
+                type="number"
+                id="P"
+                name="P"
+                step="0.001"
+                min="0"
+                max="300"
+                required
+              />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="K"
+              >Potassium (K)
+              <span class="tooltip"
+                >ℹ️<span class="tooltiptext"
+                  >Vital for overall plant health and disease resistance</span
+                ></span
+              ></label
+            >
+            <div class="input-unit" data-unit="ppm">
+              <input
+                type="number"
+                id="K"
+                name="K"
+                step="0.001"
+                min="0"
+                max="300"
+                required
+              />
+            </div>
+          </div>
+
+          
+          <div class="form-group">
+            <label for="ec"
+              >Electrical Conductivity (EC)
+              <span class="tooltip"
+                >ℹ️<span class="tooltiptext"
+                  >Measures the amount of electrolyte in the Soil</span
+                ></span
+              ></label
+            >
+            <div class="input-unit" data-unit="&mu;S/cm">
+              <input
+                type="number"
+                id="ec"
+                name="ec"
+                step="0.001"
+                min="0"
+                max="300"
+                required
+              />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="ph"
+              >Soil pH
+              <span class="tooltip"
+                >ℹ️<span class="tooltiptext"
+                  >Acidity/alkalinity level (0-14 scale)</span
+                ></span
+              ></label
+            >
+            <input
+              type="number"
+              id="ph"
+              name="ph"
+              step="0.001"
+              min="0"
+              max="14"
+              required
+            />
+          </div>
+
+          <div id="weatherParams">
+            <div class="form-group">
+              <label for="temperature"
+                >Temperature
+                <span class="tooltip"
+                  >ℹ️<span class="tooltiptext"
+                    >Average daily temperature in Celsius</span
+                  ></span
+                ></label
+              >
+              <div class="input-unit" data-unit="°C">
+                <input
+                  type="number"
+                  id="temperature"
+                  name="temperature"
+                  step="0.001"
+                  min="-10"
+                  max="50"
+                  required
+                />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="humidity"
+                >Humidity
+                <span class="tooltip"
+                  >ℹ️<span class="tooltiptext"
+                    >Relative humidity percentage</span
+                  ></span
+                ></label
+              >
+              <div class="input-unit" data-unit="%">
+                <input
+                  type="number"
+                  id="humidity"
+                  name="humidity"
+                  step="0.001"
+                  min="0"
+                  max="100"
+                  required
+                />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="rainfall"
+                >Rainfall
+                <span class="tooltip"
+                  >ℹ️<span class="tooltiptext"
+                    >Annual rainfall in millimeters</span
+                  ></span
+                ></label
+              >
+              <div class="input-unit" data-unit="mm">
+                <input
+                  type="number"
+                  id="rainfall"
+                  name="rainfall"
+                  step="0.1"
+                  min="0"
+                  max="5000"
+                  required
+                />
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group" id="soilTypeSection" style="display: none">
+            <label for="soilType"
+              >Soil Type
+              <span class="tooltip"
+                >ℹ️<span class="tooltiptext"
+                  >Type of soil in your farm</span
+                ></span
+              ></label
+            >
+            <select id="soilType" name="soilType">
+              <option value="Black">Black Soil</option>
+              <option value="Clayey">Clayey Soil</option>
+              <option value="Loamy">Loamy Soil</option>
+              <option value="Red">Red Soil</option>
+              <option value="Sandy">Sandy Soil</option>
+            </select>
+          </div>
+
+          <div id="cropNameSection" style="display: none">
+            <div class="form-group">
+              <label for="cropName"
+                >Crop Name
+                <span class="tooltip"
+                  >ℹ️<span class="tooltiptext"
+                    >Enter the crop you want to analyze</span
+                  ></span
+                ></label
+              >
+              <input
+                type="text"
+                id="cropName"
+                name="cropName"
+                placeholder="e.g., Wheat, Corn, Rice"
+              />
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" id="submitButton" class="btn btn-primary">
+              <i class="fas fa-search"></i> Recommend Crop
+            </button>
+            <button type="button" id="resetButton" class="btn btn-secondary">
+              <i class="fas fa-redo"></i> Reset
+            </button>
+          </div>
+        </form>
+
+        <div class="loading" id="loadingIndicator">
+          <div class="spinner"></div>
+          <p>Analyzing your farm data...</p>
+        </div>
+
+        <div class="error-container" id="errorContainer">
+          <strong><i class="fas fa-exclamation-circle"></i> Error:</strong>
+          <span id="errorText"></span>
+        </div>
+
+        <div class="result-container" id="resultContainer">
+          <h3 class="result-title">
+            <i class="fas fa-chart-line"></i> Analysis Results
+          </h3>
+          <div id="result"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="message" style="display:none; color:#155724; background-color:#d4edda; padding:10px; border-radius:5px; margin:10px 0;"></div>
+
+
+    <footer>
+      <p>
+        &copy; 2025 All Rights Reserved.<br />
+        Made with <i class="fas fa-heart footer-heart"></i> by Team TerraDetect
+      </p>
+    </footer>
+
+    <script src="/static/script.js"></script>
+  </body>
+</html>
