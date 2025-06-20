@@ -137,17 +137,10 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
-# dotcsv file
-Awagarh.csv
-Junagarh.csv
-Kullu.csv
-Udupi.csv
-ourreading.csv
-suitability-1.csv
-
 # Additional dotpy files
 model.py
 analysis.py
 app-backup.py
+temp.py
 
 # End of https://mrkandreev.name/snippets/gitignore-generator/#Python
