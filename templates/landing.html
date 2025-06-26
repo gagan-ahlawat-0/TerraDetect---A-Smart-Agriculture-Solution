@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TerraDetect - Choose Mode</title>
+    <link rel="stylesheet" href="/static/auth.css">
+</head>
+<body class="landing-auth-bg">
+    <div class="landing-auth-card">
+        <img src="{{ url_for('static', filename='images/td-icon.jpg') }}" alt="TerraDetect Logo" class="logo" />
+        <h1>Welcome to TerraDetect</h1>
+        <p>Please select how you want to use the application:</p>
+        <div class="button-group">
+            <a href="/software" class="btn">Use Software Only</a>
+            <a href="/login" class="btn">Use with Hardware Device</a>
+        </div>
+    </div>
+</body>
+</html> 

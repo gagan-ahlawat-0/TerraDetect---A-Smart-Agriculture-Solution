@@ -33,37 +33,39 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function setupEventListeners() {
     // Mode switching
-    document
-      .getElementById("bestCropMode")
-      .addEventListener("click", () => setMode("crop"));
-    document
-      .getElementById("cropSuitabilityMode")
-      .addEventListener("click", () => setMode("suitability"));
-    document
-      .getElementById("fertilizerMode")
-      .addEventListener("click", () => setMode("fertilizer"));
+    const bestCropBtn = document.getElementById("bestCropMode");
+    if (bestCropBtn) bestCropBtn.addEventListener("click", () => setMode("crop"));
+    const cropSuitabilityBtn = document.getElementById("cropSuitabilityMode");
+    if (cropSuitabilityBtn) cropSuitabilityBtn.addEventListener("click", () => setMode("suitability"));
+    const fertilizerBtn = document.getElementById("fertilizerMode");
+    if (fertilizerBtn) fertilizerBtn.addEventListener("click", () => setMode("fertilizer"));
 
     // Weather source selection
-    document
-      .getElementById("manualWeatherBtn")
-      .addEventListener("click", () => setWeatherSource("manual"));
-    document
-      .getElementById("apiWeatherBtn")
-      .addEventListener("click", () => setWeatherSource("api"));
-    document
-      .getElementById("sensorWeatherBtn")
-      .addEventListener("click", () => setWeatherSource("sensor"));
+    const manualWeatherBtn = document.getElementById("manualWeatherBtn");
+    if (manualWeatherBtn) manualWeatherBtn.addEventListener("click", () => setWeatherSource("manual"));
+    const apiWeatherBtn = document.getElementById("apiWeatherBtn");
+    if (apiWeatherBtn) apiWeatherBtn.addEventListener("click", () => setWeatherSource("api"));
+    const sensorWeatherBtn = document.getElementById("sensorWeatherBtn");
+    if (sensorWeatherBtn) sensorWeatherBtn.addEventListener("click", () => setWeatherSource("sensor"));
 
     // Sensor data button
-    document
-      .getElementById("useSensorDataBtn")
-      .addEventListener("click", useSensorData);
+    const useSensorDataBtn = document.getElementById("useSensorDataBtn");
+    if (useSensorDataBtn) useSensorDataBtn.addEventListener("click", useSensorData);
 
     // Form submission
-    elements.form.addEventListener("submit", handleFormSubmit);
+    if (elements.form) elements.form.addEventListener("submit", handleFormSubmit);
 
     // Reset button
-    document.getElementById("resetButton").addEventListener("click", resetForm);
+    const resetBtn = document.getElementById("resetButton");
+    if (resetBtn) resetBtn.addEventListener("click", resetForm);
+
+    // Forcibly prevent default on form
+    if (elements.form) {
+      elements.form.onsubmit = function(e) {
+        if (e) e.preventDefault();
+        return false;
+      };
+    }
   }
 
   function showMessage(msg) {
@@ -291,7 +293,9 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   async function handleFormSubmit(event) {
-    event.preventDefault();
+    console.log("Form submit intercepted by JS");
+    if (event) event.preventDefault();
+    else return false;
 
     // Reset previous results/errors
     elements.resultContainer.style.display = "none";
@@ -352,17 +356,35 @@ document.addEventListener("DOMContentLoaded", function () {
         body: JSON.stringify(formData),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Server error occurred");
+      let result;
+      try {
+        result = await response.json();
+      } catch (jsonErr) {
+        showError("Server returned invalid JSON. Check backend logs.");
+        console.error("Invalid JSON response:", jsonErr);
+        showLoading(false);
+        return;
       }
 
-      const result = await response.json();
+      console.log("/predict response:", result);
+
+      if (!response.ok || result.error) {
+        showError(result.error || "Server error occurred");
+        showLoading(false);
+        return;
+      }
+
+      if (!result || Object.keys(result).length === 0) {
+        showError("No recommendation received. Please try again.");
+        showLoading(false);
+        return;
+      }
 
       // Display the result
       displayResult(result);
     } catch (error) {
-      showError(error.message);
+      showError(error.message || "Unknown error occurred");
+      console.error("handleFormSubmit error:", error);
     } finally {
       showLoading(false);
     }
@@ -546,4 +568,9 @@ document.addEventListener("DOMContentLoaded", function () {
     elements.resultContainer.style.display = "none";
     elements.errorContainer.style.display = "none";
   }
+
+  // Global error handler for debugging
+  window.onerror = function(message, source, lineno, colno, error) {
+    console.error('Global JS error:', message, 'at', source + ':' + lineno + ':' + colno, error);
+  };
 });

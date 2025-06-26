@@ -15,15 +15,37 @@
     <link rel="stylesheet" href="/static/style.css" />
   </head>
   <body>
-    <header>
-      <img
-        src="{{ url_for('static', filename='images/td-icon.jpg') }}" style="border-radius: 50%; height: 4rem; width: 4rem;"
-        alt="TerraDetect Logo"
-        class="logo"
-      />
-
-      <h1>TerraDetect</h1>
+    <header class="main-header" style="display: flex; align-items: center; justify-content: space-between; width: 100%; flex-wrap: wrap;">
+      <div style="flex:1;"></div>
+      <div class="header-center" style="flex:2; display: flex; align-items: center; justify-content: center; gap: 1rem;">
+        <img src="{{ url_for('static', filename='images/td-icon.jpg') }}" alt="TerraDetect Logo" class="logo" style="height: 3rem; width: 3rem; border-radius: 50%;" />
+        <h1 style="font-size:2.2rem; letter-spacing:2px; margin:0;">TerraDetect</h1>
+      </div>
+      <div class="header-right" style="flex:1; display: flex; flex-direction: column; align-items: flex-end; gap: 0.3rem; min-width:60px;">
+        {% if session.username %}
+          <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="User Avatar" style="width: 38px; height: 38px; border-radius: 50%; object-fit: cover; box-shadow: 0 1px 4px rgba(0,0,0,0.08);" />
+          <a href="/logout" class="btn" style="margin-left:auto;">Logout</a>
+        {% endif %}
+      </div>
     </header>
+    <style>
+      @media (max-width: 600px) {
+        .main-header {
+          flex-direction: column !important;
+          align-items: center !important;
+        }
+        .header-center {
+          order: 1;
+          justify-content: center !important;
+          margin-bottom: 0.5rem;
+        }
+        .header-right {
+          order: 2;
+          align-items: center !important;
+          margin-bottom: 0.5rem;
+        }
+      }
+    </style>
 
     <div class="sidebar">
       <div class="sidebar-header">
@@ -50,9 +72,11 @@
           <button class="sidebar-btn" id="apiWeatherBtn">
             <i class="fas fa-cloud"></i> Weather API
           </button>
+          {% if session.device_id %}
           <button class="sidebar-btn" id="sensorWeatherBtn">
             <i class="fas fa-satellite-dish"></i> Fetch Sensors
           </button>
+          {% endif %}
         </div>
 
         <div
@@ -107,7 +131,7 @@
     </div>
 
     <div class="main-content">
-      <div class="container">
+      <div class="container" style="box-shadow:0 8px 32px 0 rgba(31,38,135,0.15); border-radius:18px; background:rgba(255,255,255,0.95);">
         <h2 id="formTitle">Find the Best Crop</h2>
 
         <form id="cropForm">

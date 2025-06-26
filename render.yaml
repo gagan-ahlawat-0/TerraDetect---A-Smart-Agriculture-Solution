@@ -1,15 +1,17 @@
 services:
   - type: web
-    name: flask-agriculture-app
+    name: terradetect
     env: python
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app
     envVars:
+      - key: FLASK_ENV
+        value: production
       - key: THINGSPEAK_API_KEY
-        fromDashboard: true
-      - key: THINGSPEAK_READ_KEY
-        fromDashboard: true
-      - key: THINGSPEAK_WRITE_KEY
-        fromDashboard: true
+        sync: false
       - key: THINGSPEAK_CHANNEL_ID
-        fromDashboard: true
+        sync: false
+      - key: THINGSPEAK_READ_KEY
+        sync: false
+      - key: THINGSPEAK_WRITE_KEY
+        sync: false
