@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Device Login - TerraDetect</title>
+    <link rel="stylesheet" href="/static/auth.css">
+</head>
+<body class="landing-auth-bg">
+    <div class="landing-auth-card">
+        <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="User Avatar" class="avatar" />
+        <img src="{{ url_for('static', filename='images/td-icon.jpg') }}" alt="TerraDetect Logo" class="logo" />
+        <h1>Login with Device</h1>
+        {% if error %}
+            <div class="error">{{ error }}</div>
+        {% endif %}
+        <form method="post">
+            <label for="username">Username:</label>
+            <input type="text" id="username" name="username" required>
+            <label for="password">Password:</label>
+            <input type="password" id="password" name="password" required>
+            <label for="device_id">Device ID:</label>
+            <input type="text" id="device_id" name="device_id" maxlength="6" minlength="6" required pattern="[A-Za-z0-9]{6}">
+            <button type="submit" class="btn">Login</button>
+        </form>
+        <a href="/register" class="btn">Register</a>
+        <a href="/" class="btn">Back</a>
+    </div>
+</body>
+</html> 

@@ -144,6 +144,10 @@ app-backup.py
 temp.py
 
 # other files
+td_sketch.ino 
+PROJECT_WORKFLOW.txt
+
+# other files
 PROJECT_WORKFLOW.txt
 
 # End of https://mrkandreev.name/snippets/gitignore-generator/#Python

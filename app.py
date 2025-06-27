@@ -1,4 +1,5 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, redirect, url_for, session
+from flask_cors import CORS
 import pickle
 import pandas as pd
 import numpy as np
@@ -8,11 +9,15 @@ from datetime import datetime
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
 from dotenv import load_dotenv
+import sqlite3
+from werkzeug.security import generate_password_hash, check_password_hash
 
 # Load environment variables from .env (only for local development)
 load_dotenv()
 
 app = Flask(__name__)
+CORS(app)
+app.secret_key = 'your_secret_key_here'  # Needed for session management
 
 # Temporary storage for sensor data
 sensor_data = {}
@@ -27,6 +32,58 @@ THINGSPEAK_WRITE_KEY = os.environ.get("THINGSPEAK_WRITE_KEY", "")
 if not all([THINGSPEAK_API_KEY, THINGSPEAK_CHANNEL_ID, THINGSPEAK_READ_KEY, THINGSPEAK_WRITE_KEY]):
     print("⚠️ Warning: One or more ThingSpeak environment variables are missing.")
 
+# Hardcoded valid device IDs (replace with DB or CSV as needed)
+VALID_DEVICE_IDS = {"ABC123", "DEF456", "GHI789", "JKL012", "MNO345"}
+
+DATABASE = 'terradetect.db'
+
+def get_db():
+    conn = sqlite3.connect(DATABASE)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_db():
+    with get_db() as db:
+        db.execute('''CREATE TABLE IF NOT EXISTS device_ids (
+            device_id TEXT PRIMARY KEY,
+            registered INTEGER DEFAULT 0
+        )''')
+        db.execute('''CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            device_id TEXT UNIQUE NOT NULL,
+            FOREIGN KEY(device_id) REFERENCES device_ids(device_id)
+        )''')
+        db.commit()
+
+# Call init_db() at startup
+init_db()
+
+def is_valid_device_id(device_id):
+    db = get_db()
+    cur = db.execute('SELECT * FROM device_ids WHERE device_id = ? AND registered = 0', (device_id,))
+    return cur.fetchone() is not None
+
+def register_user(username, password, device_id):
+    db = get_db()
+    password_hash = generate_password_hash(password)
+    try:
+        db.execute('INSERT INTO users (username, password_hash, device_id) VALUES (?, ?, ?)',
+                   (username, password_hash, device_id))
+        db.execute('UPDATE device_ids SET registered = 1 WHERE device_id = ?', (device_id,))
+        db.commit()
+        return True, None
+    except sqlite3.IntegrityError as e:
+        return False, str(e)
+
+def authenticate_user(username, password, device_id):
+    db = get_db()
+    cur = db.execute('SELECT * FROM users WHERE username = ? AND device_id = ?', (username, device_id))
+    user = cur.fetchone()
+    if user and check_password_hash(user['password_hash'], password):
+        return True
+    return False
 
 def load_models():
     """Load all required models and data"""
@@ -365,96 +422,130 @@ def generate_application_advice(fertilizer, crop_name=None):
     return advice or "Apply according to standard practices for your region."
 
 @app.route("/")
-def home():
+def landing():
+    return render_template("landing.html")
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    error = None
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        device_id = request.form.get("device_id", "").strip()
+        if authenticate_user(username, password, device_id):
+            session["username"] = username
+            session["device_id"] = device_id
+            return redirect(url_for("dashboard"))
+        else:
+            error = "Invalid username, password, or device ID. Please try again."
+    return render_template("login.html", error=error)
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    error = None
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        device_id = request.form.get("device_id", "").strip()
+        if not is_valid_device_id(device_id):
+            error = "Invalid or already registered Device ID. Please check your device ID."
+        else:
+            success, err = register_user(username, password, device_id)
+            if success:
+                return redirect(url_for("login"))
+            else:
+                error = f"Registration failed: {err}"
+    return render_template("register.html", error=error)
+
+@app.route("/dashboard")
+def dashboard():
+    device_id = session.get("device_id")
+    if not device_id:
+        return redirect(url_for("login"))
+    # Fetch data for this device (for now, just fetch from ThingSpeak as before)
+    result = fetch_thingspeak_data()
+    return render_template("index.html", device_id=device_id, sensor_data=result.get("data", {}))
+
+@app.route("/software")
+def software_only():
     return render_template("index.html")
 
 @app.route("/predict", methods=["POST"])
 def predict():
     try:
         data = request.get_json()
+        print("/predict called with data:", data)
         mode = data.get("mode", "crop")
-        
-        # Use either manual input or sensor data
+        print("Mode:", mode)
         use_sensor_data = data.get("use_sensor_data", False)
-        
+        print("use_sensor_data:", use_sensor_data)
+
         if use_sensor_data:
             # Try to fetch fresh data from ThingSpeak
             if not sensor_data or (datetime.now() - datetime.fromisoformat(sensor_data.get('timestamp', '2000-01-01'))).total_seconds() > 300:
                 fetch_thingspeak_data()
-            
-            # Use sensor data for core parameters
             parameters = [
                 sensor_data.get("N", 0),
                 sensor_data.get("P", 0),
                 sensor_data.get("K", 0),
                 sensor_data.get("temperature", 25),
-                data.get("humidity", sensor_data.get("humidity", 50)),  # Allow override
+                data.get("humidity", sensor_data.get("humidity", 50)),
                 sensor_data.get("ph", 7),
-                float(data.get("rainfall", 100))  # Rainfall typically not from sensors
+                float(data.get("rainfall", 100))
             ]
-            
-            # Store EC value for later use
             ec_value = sensor_data.get("ec", 0)
         else:
-            # Use manual input
             parameters = [
                 float(data.get("N", 0)),
-                float(data.get("P", 0)), 
-                float(data.get("K", 0)), 
-                float(data.get("temperature", 25)), 
-                float(data.get("humidity", 50)), 
+                float(data.get("P", 0)),
+                float(data.get("K", 0)),
+                float(data.get("temperature", 25)),
+                float(data.get("humidity", 50)),
                 float(data.get("ph", 7)),
                 float(data.get("rainfall", 100))
             ]
-            
-            # Store EC value for later use
             ec_value = float(data.get("ec", 0))
-        
+        print("Parameters:", parameters)
+        print("EC value:", ec_value)
+
         if mode == "crop":
             if models['crop_model'] is None:
+                print("Crop model not available!")
                 return jsonify({"error": "Crop model not available"}), 500
-                
-            # Predict the crop using the model
             prediction = models['crop_model'].predict([parameters])[0]
             confidence = models['crop_model'].predict_proba([parameters])[0].max() * 100 if hasattr(models['crop_model'], "predict_proba") else 85
-            
-            # Calculate suitability scores for all crops in the dataset
             all_crops = models['crop_data']["label"].unique()
             suitability_scores = []
             for crop in all_crops:
                 suitability, _, _ = calculate_suitability(parameters, crop)
                 if suitability is not None:
                     suitability_scores.append((crop, suitability))
-            
-            # Find the crop with the maximum suitability score
             if suitability_scores:
                 best_crop_by_suitability = max(suitability_scores, key=lambda x: x[1])
             else:
                 best_crop_by_suitability = (None, 0)
-            
+            print("Prediction:", prediction, "Best by suitability:", best_crop_by_suitability)
             return jsonify({
                 "crop": best_crop_by_suitability[0],
                 "confidence": round(best_crop_by_suitability[1], 2),
                 "crop-predicted": prediction,
                 "confidence-predicted": round(confidence, 2)
             })
-            
         elif mode == "suitability":
             crop_name = data.get("crop_name")
             if not crop_name:
+                print("No crop name provided!")
                 return jsonify({"error": "Crop name is required"}), 400
-                
             suitability, recommendations, table_data = calculate_suitability(parameters, crop_name)
             if suitability is None:
+                print("Suitability error:", recommendations)
                 return jsonify({"error": recommendations}), 400
-                
             return jsonify({
                 "crop": crop_name,
                 "suitability": suitability,
                 "recommendations": recommendations,
                 "table_data": table_data
             })
-            
         elif mode == "fertilizer":
             soil_data = {
                 "N": parameters[0],
@@ -464,24 +555,40 @@ def predict():
                 "humidity": parameters[4],
                 "ph": parameters[5],
                 "moisture": sensor_data.get("moisture", 40) if use_sensor_data else float(data.get("moisture", 40)),
-                "ec": ec_value,  # Adding EC value
-                "soil": data.get("soil", "Black")  # Adding soil type
+                "ec": ec_value,
+                "soil": data.get("soil", "Black")
             }
-            
-            # Use the trained model for fertilizer recommendation
+            print("Soil data:", soil_data)
             recommendation = predict_fertilizer(soil_data, data.get("crop_name"))
-            
             if "error" in recommendation:
+                print("Fertilizer error:", recommendation["error"])
                 return jsonify({"error": recommendation["error"]}), 500
-                
             return jsonify(recommendation)
-            
         else:
+            print("Invalid mode specified:", mode)
             return jsonify({"error": "Invalid mode specified"}), 400
-            
     except Exception as e:
+        print("Exception in /predict:", str(e))
         return jsonify({"error": str(e)}), 500
     
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("landing"))
+
+API_KEY = "YOUR_SUPER_SECRET_KEY"
+
+@app.route('/api/device_data', methods=['POST'])
+def receive_device_data():
+    api_key = request.headers.get('x-api-key')
+    if api_key != API_KEY:
+        return jsonify({"status": "error", "message": "Unauthorized"}), 401
+    data = request.get_json()
+    device_id = data.get('device_id')
+    # TODO: Validate device_id, save to database, etc.
+    print(f"Received data from {device_id}: {data}")
+    return jsonify({"status": "success"})
+
 app = app
 
 if __name__ == "__main__":
