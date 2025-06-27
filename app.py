@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify, render_template, redirect, url_for, session
+from flask_cors import CORS
 import pickle
 import pandas as pd
 import numpy as np
@@ -15,6 +16,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 load_dotenv()
 
 app = Flask(__name__)
+CORS(app)
 app.secret_key = 'your_secret_key_here'  # Needed for session management
 
 # Temporary storage for sensor data

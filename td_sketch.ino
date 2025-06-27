@@ -11,8 +11,8 @@
 #include <WiFiClientSecure.h>
 
 // WiFi and ThingSpeak settings
-const char* write_apiKey = "U8APYGOIS38JY8SU";
-const char* read_apiKey = "ZGSNHEY6VC3URKUH";
+const char *write_apiKey = "U8APYGOIS38JY8SU";
+const char *read_apiKey = "ZGSNHEY6VC3URKUH";
 const int channelID = 2899894;
 
 // Sensor Pins
@@ -41,61 +41,70 @@ float emaN_scaled = 0.0, emaP_scaled = 0.0, emaK_scaled = 0.0;
 const float alpha = 0.1;
 uint8_t NPK_slave_address = 0x13;
 
-#define DEVICE_ID_LENGTH 7 // 6 chars + null terminator
+#define DEVICE_ID_LENGTH 7
 char device_id[DEVICE_ID_LENGTH] = "000000";
 
 #define API_KEY "YOUR_SUPER_SECRET_KEY"
 
-void saveDeviceID(const char* id) {
+void saveDeviceID(const char *id)
+{
   EEPROM.begin(64);
-  for (int i = 0; i < DEVICE_ID_LENGTH; i++) {
+  for (int i = 0; i < DEVICE_ID_LENGTH; i++)
+  {
     EEPROM.write(i, id[i]);
   }
   EEPROM.commit();
   EEPROM.end();
 }
 
-void loadDeviceID() {
+void loadDeviceID()
+{
   EEPROM.begin(64);
-  for (int i = 0; i < DEVICE_ID_LENGTH; i++) {
+  for (int i = 0; i < DEVICE_ID_LENGTH; i++)
+  {
     device_id[i] = EEPROM.read(i);
   }
-  device_id[DEVICE_ID_LENGTH-1] = '\0';
+  device_id[DEVICE_ID_LENGTH - 1] = '\0';
   EEPROM.end();
 }
 
-void setupWiFi() {
+void setupWiFi()
+{
   WiFiManager wifiManager;
   WiFiManagerParameter custom_device_id("device_id", "Device ID (6 chars)", device_id, DEVICE_ID_LENGTH);
   wifiManager.addParameter(&custom_device_id);
   wifiManager.autoConnect("TerraDetect-Setup");
   strncpy(device_id, custom_device_id.getValue(), DEVICE_ID_LENGTH);
-  device_id[DEVICE_ID_LENGTH-1] = '\0';
+  device_id[DEVICE_ID_LENGTH - 1] = '\0';
   saveDeviceID(device_id);
   Serial.print("\nConnected to WiFi. Device ID: ");
   Serial.println(device_id);
 }
 
-float mapPH(float analogValue) {
+float mapPH(float analogValue)
+{
   const float coeffA = -24.71;
   const float coeffB = 195.15;
   float ph = coeffA * log(analogValue) + coeffB;
   return constrain(ph, 0.0, 14.0);
 }
 
-float readMoisture() {
+float readMoisture()
+{
   int moistureValue = analogRead(moisture_sensor_pin);
   float moisturePercentage = map(moistureValue, 2500, 1000, 0, 100);
   return constrain(moisturePercentage, 0, 100);
 }
 
-float readTemperature() {
+float readTemperature()
+{
   sensors.requestTemperatures();
   float temperature = sensors.getTempCByIndex(0);
   return constrain(temperature, -10.00, 60.00);
 }
 
-float readEC(float tempC) {
+float readEC(float tempC)
+{
   digitalWrite(ECPower, HIGH);
   delay(100);
   int raw = analogRead(EC_Read);
@@ -103,17 +112,20 @@ float readEC(float tempC) {
   raw = analogRead(EC_Read);
   digitalWrite(ECPower, LOW);
 
-  if (raw == 0) return 0.00;
+  if (raw == 0)
+    return 0.00;
   float Vdrop = (Vin * raw) / 4095.0;
-  if (Vin - Vdrop == 0) return 0.00;
+  if (Vin - Vdrop == 0)
+    return 0.00;
   float Rwater = (Vdrop * R1) / (Vin - Vdrop);
   float ec = 1000 / (Rwater * K);
   float ec25 = ec / (1 + Temp_Coef * (tempC - 25.0));
   return ec25;
 }
 
-void readNPK(float& N_scaled, float& P_scaled, float& K_scaled) {
-  uint8_t request[] = { NPK_slave_address, 0x03, 0x00, 0x00, 0x00, 0x06 };
+void readNPK(float &N_scaled, float &P_scaled, float &K_scaled)
+{
+  uint8_t request[] = {NPK_slave_address, 0x03, 0x00, 0x00, 0x00, 0x06};
   uint16_t crc = calculateCRC(request, 6);
   uint8_t query[8];
   memcpy(query, request, 6);
@@ -130,37 +142,48 @@ void readNPK(float& N_scaled, float& P_scaled, float& K_scaled) {
   digitalWrite(RE_Control, LOW);
   delay(300);
 
-  if (rs485.available() >= 16) {
+  if (rs485.available() >= 16)
+  {
     uint8_t response[16];
-    for (int i = 0; i < 16; i++) response[i] = rs485.read();
+    for (int i = 0; i < 16; i++)
+      response[i] = rs485.read();
     int N_raw = (response[9] << 8) | response[10];
     int P_raw = (response[11] << 8) | response[12];
     int K_raw = (response[13] << 8) | response[14];
     N_scaled = (N_raw / 25000.0) * 150.0;
     P_scaled = (P_raw / 8000.0) * 200.0;
     K_scaled = (K_raw / 28000.0) * 240.0;
-  } else {
+  }
+  else
+  {
     N_scaled = P_scaled = K_scaled = -1.0;
   }
-  while (rs485.available()) rs485.read();
+  while (rs485.available())
+    rs485.read();
 }
 
-uint16_t calculateCRC(uint8_t *data, uint8_t length) {
+uint16_t calculateCRC(uint8_t *data, uint8_t length)
+{
   uint16_t crc = 0xFFFF;
-  for (uint8_t i = 0; i < length; i++) {
+  for (uint8_t i = 0; i < length; i++)
+  {
     crc ^= data[i];
-    for (uint8_t j = 0; j < 8; j++) crc = (crc >> 1) ^ (crc & 1 ? 0xA001 : 0);
+    for (uint8_t j = 0; j < 8; j++)
+      crc = (crc >> 1) ^ (crc & 1 ? 0xA001 : 0);
   }
   return crc;
 }
 
-float updateEMA(float prev, float curr) {
+float updateEMA(float prev, float curr)
+{
   return alpha * curr + (1 - alpha) * prev;
 }
 
-void sendToThingSpeak(float pH, float moisture, float temp, float EC, float N, float P, float K) {
+void sendToThingSpeak(float pH, float moisture, float temp, float EC, float N, float P, float K)
+{
   WiFiClient client;
-  if (client.connect("api.thingspeak.com", 80)) {
+  if (client.connect("api.thingspeak.com", 80))
+  {
     String postStr = "api_key=" + String(write_apiKey) + "&field1=" + String(device_id) + "&field2=" + String(pH, 2) + "&field3=" + String(moisture, 1) + "&field4=" + String(temp, 2) + "&field5=" + String(EC, 2) + "&field6=" + String(N, 2) + "&field7=" + String(P, 2) + "&field8=" + String(K, 2);
     client.println("POST /update HTTP/1.1");
     client.println("Host: api.thingspeak.com");
@@ -170,22 +193,27 @@ void sendToThingSpeak(float pH, float moisture, float temp, float EC, float N, f
     client.println("Connection: close");
     client.println();
     client.print(postStr);
-    while (client.connected() || client.available()) if (client.available()) client.readStringUntil('\n');
+    while (client.connected() || client.available())
+      if (client.available())
+        client.readStringUntil('\n');
     client.stop();
   }
   delay(20000);
 }
 
-void sendToServer(float pH, float moisture, float temp, float EC, float N, float P, float K) {
+void sendToServer(float pH, float moisture, float temp, float EC, float N, float P, float K)
+{
   const int maxRetries = 3;
   int attempt = 0;
   bool success = false;
-  while (attempt < maxRetries && !success) {
-    if (WiFi.status() == WL_CONNECTED) {
+  while (attempt < maxRetries && !success)
+  {
+    if (WiFi.status() == WL_CONNECTED)
+    {
       WiFiClientSecure client;
-      client.setInsecure(); // Only for development/testing!
+      client.setInsecure();
       HTTPClient http;
-      http.begin(client, "https://your-server-domain/api/device_data");
+      http.begin(client, "https://terradetect.onrender.com/api/device_data");
       http.addHeader("Content-Type", "application/json");
       http.addHeader("x-api-key", API_KEY);
       // Get timestamp (epoch seconds)
@@ -207,25 +235,32 @@ void sendToServer(float pH, float moisture, float temp, float EC, float N, float
       Serial.print("Server response: ");
       Serial.println(response);
       http.end();
-      if (httpResponseCode > 0 && httpResponseCode < 400) {
+      if (httpResponseCode > 0 && httpResponseCode < 400)
+      {
         success = true;
-      } else {
+      }
+      else
+      {
         Serial.print("HTTP POST failed, code: ");
         Serial.println(httpResponseCode);
         attempt++;
         delay(2000); // Wait 2 seconds before retry
       }
-    } else {
+    }
+    else
+    {
       Serial.println("WiFi not connected, cannot send data.");
       break;
     }
   }
-  if (!success) {
+  if (!success)
+  {
     Serial.println("Failed to send data to server after multiple attempts.");
   }
 }
 
-void setup() {
+void setup()
+{
   Serial.begin(115200);
   rs485.begin(9600, SERIAL_8N1, 16, 17);
   pinMode(DE_Control, OUTPUT);
@@ -247,7 +282,8 @@ void setup() {
   loadDeviceID();
 }
 
-void loop() {
+void loop()
+{
   esp_task_wdt_reset();
   ArduinoOTA.handle();
 
@@ -259,7 +295,8 @@ void loop() {
   emaEC = readEC(emaTemp);
   readNPK(emaN_scaled, emaP_scaled, emaK_scaled);
 
-  for (int i = 0; i < 24; i++) {
+  for (int i = 0; i < 24; i++)
+  {
     float pH = mapPH(analogRead(pH_sensor_pin));
     float moisture = readMoisture();
     float temp = readTemperature();
