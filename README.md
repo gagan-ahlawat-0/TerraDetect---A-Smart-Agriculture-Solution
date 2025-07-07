@@ -107,12 +107,6 @@ python app.py
 
 ---
 
-## 📄 License
-
-This project is licensed under the [MIT License](LICENSE).
-
----
-
 ## 💡 Inspiration
 
 TerraDetect is inspired by the need to empower farmers with AI tools that are affordable, practical, and efficient. It bridges the gap between traditional farming and smart agriculture.
