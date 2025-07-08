@@ -4,46 +4,31 @@ TerraDetect is a smart farming assistant that combines hardware sensors, machine
 
 ---
 
+## 📁 Project Structure
+
+```
+Software/
+  backend/      # Flask backend, ML models, data, MongoDB integration
+  frontend/     # Static files and HTML templates for the web UI
+  render.yaml   # Deployment config
+```
+
+---
+
 ## 🚀 Features
 
 - 🌾 **Smart Crop & Fertilizer Prediction** using Machine Learning
 - 🌡️ **Live Monitoring** of soil moisture, temperature, pH, EC, and NPK via ESP32
 - 🧠 **AI-Enabled Recommendations** for optimal agriculture planning
-- 🔒 **JWT-based Authentication** for device and user security
-- 🌙 **Dark Mode** support for better usability
+- 🔒 **User & Device Authentication** (MongoDB Atlas)
 - 📡 **ThingSpeak Integration** for external sensor data logging
 - 💻 **Modern UI** with responsive frontend
 
 ---
 
-## 🛠️ Tech Stack
+## 🛠️ Backend Setup
 
-| Layer      | Technologies                                 |
-|------------|----------------------------------------------|
-| Frontend   | HTML, CSS, JavaScript                        |
-| Backend    | Python (Flask), REST API, JWT Auth           |
-| Hardware   | ESP32-WROOM-32, DHT, pH, EC, NPK, Moisture   |
-| ML Models  | Scikit-learn based Crop & Fertilizer ML      |
-| Database   | JSON storage / Future support for MongoDB    |
-| External   | ThingSpeak API for IoT integration           |
-
----
-
-## 📸 Screenshots
-
-_Coming Soon!_
-
----
-
-## ⚙️ Installation
-
-### 1. Clone the Repository
-```bash
-git clone https://github.com/gagan-ahlawat-0/TerraDetect---A-Smart-Agriculture-Solution.git
-cd TerraDetect---A-Smart-Agriculture-Solution
-```
-
-### 2. Install Backend Dependencies
+### 1. Install Dependencies
 ```bash
 cd backend
 python3 -m venv venv
@@ -51,37 +36,43 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
+### 2. Configure Environment
+Create a `.env` file in `backend/` with:
+```
+MONGO_URI=mongodb+srv://<username>:<password>@<cluster-url>/<dbname>?retryWrites=true&w=majority
+THINGSPEAK_API_KEY=...
+THINGSPEAK_CHANNEL_ID=...
+THINGSPEAK_READ_KEY=...
+THINGSPEAK_WRITE_KEY=...
+```
+
 ### 3. Run the Flask Server
 ```bash
 python app.py
 ```
 
-### 4. Connect Hardware (ESP32)
-- Flash ESP32 with the updated Arduino sketch
-- Make sure to include `device_id` and remove hardcoded WiFi credentials
-
 ---
 
-## 🌐 API Endpoints
+## 🌐 Main API Endpoints
 
 | Method | Endpoint               | Description                          |
 |--------|------------------------|--------------------------------------|
-| POST   | `/api/register-device` | Registers a new hardware device      |
-| POST   | `/api/data`            | Accepts sensor data from ESP32       |
-| GET    | `/api/crops`           | Predicts crops based on input data   |
-| GET    | `/api/fertilizers`     | Recommends fertilizers               |
+| POST   | `/api/register`        | Register a new user                  |
+| POST   | `/api/login`           | User login                           |
+| GET    | `/api/sensor/latest`   | Get latest sensor data               |
+| POST   | `/predict`             | Crop/fertilizer/suitability predict  |
 
 ---
 
-## 🧪 Example ESP32 Data Payload
+## 🧪 Example Sensor Data Payload
 ```json
 {
   "device_id": "A1B2C3",
   "temperature": 27.5,
   "humidity": 68,
-  "pH": 6.5,
+  "ph": 6.5,
   "moisture": 55,
-  "EC": 1.2,
+  "ec": 1.2,
   "N": 90,
   "P": 40,
   "K": 35

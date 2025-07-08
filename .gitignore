@@ -142,6 +142,9 @@ model.py
 analysis.py
 app-backup.py
 temp.py
+backend/test_routes.py
+backend/add_device_id.py
+backend/admin_add_device_id.py
 
 # other files
 td_sketch.ino 
