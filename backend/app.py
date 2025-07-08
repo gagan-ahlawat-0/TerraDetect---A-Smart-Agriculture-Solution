@@ -9,15 +9,21 @@ from datetime import datetime
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
 from dotenv import load_dotenv
-import sqlite3
 from werkzeug.security import generate_password_hash, check_password_hash
+from pymongo import MongoClient
 
 # Load environment variables from .env (only for local development)
 load_dotenv()
 
-app = Flask(__name__)
-CORS(app)
-app.secret_key = 'your_secret_key_here'  # Needed for session management
+app = Flask(
+    __name__,
+    static_folder=os.path.abspath(os.path.join(os.path.dirname(__file__), '../frontend/static')),
+    template_folder=os.path.abspath(os.path.join(os.path.dirname(__file__), '../frontend/templates'))
+)
+CORS(app, supports_credentials=True, origins=["http://localhost:3000", "http://192.168.223.53:3000"])
+app.secret_key = os.environ.get('SECRET_KEY')
+if not app.secret_key:
+    raise RuntimeError('SECRET_KEY environment variable not set!')
 
 # Temporary storage for sensor data
 sensor_data = {}
@@ -35,55 +41,11 @@ if not all([THINGSPEAK_API_KEY, THINGSPEAK_CHANNEL_ID, THINGSPEAK_READ_KEY, THIN
 # Hardcoded valid device IDs (replace with DB or CSV as needed)
 VALID_DEVICE_IDS = {"ABC123", "DEF456", "GHI789", "JKL012", "MNO345"}
 
-DATABASE = 'terradetect.db'
-
-def get_db():
-    conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-def init_db():
-    with get_db() as db:
-        db.execute('''CREATE TABLE IF NOT EXISTS device_ids (
-            device_id TEXT PRIMARY KEY,
-            registered INTEGER DEFAULT 0
-        )''')
-        db.execute('''CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            device_id TEXT UNIQUE NOT NULL,
-            FOREIGN KEY(device_id) REFERENCES device_ids(device_id)
-        )''')
-        db.commit()
-
-# Call init_db() at startup
-init_db()
-
-def is_valid_device_id(device_id):
-    db = get_db()
-    cur = db.execute('SELECT * FROM device_ids WHERE device_id = ? AND registered = 0', (device_id,))
-    return cur.fetchone() is not None
-
-def register_user(username, password, device_id):
-    db = get_db()
-    password_hash = generate_password_hash(password)
-    try:
-        db.execute('INSERT INTO users (username, password_hash, device_id) VALUES (?, ?, ?)',
-                   (username, password_hash, device_id))
-        db.execute('UPDATE device_ids SET registered = 1 WHERE device_id = ?', (device_id,))
-        db.commit()
-        return True, None
-    except sqlite3.IntegrityError as e:
-        return False, str(e)
-
-def authenticate_user(username, password, device_id):
-    db = get_db()
-    cur = db.execute('SELECT * FROM users WHERE username = ? AND device_id = ?', (username, device_id))
-    user = cur.fetchone()
-    if user and check_password_hash(user['password_hash'], password):
-        return True
-    return False
+MONGO_URI = os.environ.get("MONGO_URI")
+client = MongoClient(MONGO_URI)
+db = client['terradetect']
+users_col = db['users']
+devices_col = db['device_ids']
 
 def load_models():
     """Load all required models and data"""
@@ -98,12 +60,12 @@ def load_models():
 
     try:
         # Load crop recommendation model
-        with open("crop-model.pkl", "rb") as f:
+        with open(os.path.join(os.path.dirname(__file__), "crop-model.pkl"), "rb") as f:
             models['crop_model'] = pickle.load(f)
         print("Crop recommendation model loaded successfully.")
 
         # Load fertilizer model and data
-        with open("fertilizer-model.pkl", "rb") as f:
+        with open(os.path.join(os.path.dirname(__file__), "fertilizer-model.pkl"), "rb") as f:
             data = pickle.load(f)
             models['fertilizer_model'] = data['model']
             models['label_encoders'] = data['label_encoders']
@@ -112,7 +74,7 @@ def load_models():
         print("Fertilizer recommendation model loaded successfully.")
         
         # Load crop data for suitability calculations
-        models['crop_data'] = pd.read_csv("crop-data.csv")
+        models['crop_data'] = pd.read_csv(os.path.join(os.path.dirname(__file__), "crop-data.csv"))
         print("Crop data loaded successfully.")
         
     except Exception as e:
@@ -140,17 +102,23 @@ def fetch_thingspeak_data():
         if response.status_code == 200:
             data = response.json()
             
+            def safe_float(val, default):
+                try:
+                    return float(val)
+                except (TypeError, ValueError):
+                    return default
+            
             # Map ThingSpeak fields to sensor data
             # Adjust field numbers based on your ThingSpeak channel configuration
             sensor_values = {
-                'ph': float(data.get('field2', 7)),
-                'moisture': float(data.get('field3', 40)),
-                'temperature': float(data.get('field4', 25)),
-                'ec': float(data.get('field5', 0)),
-                'N': float(data.get('field6', 0)),
-                'P': float(data.get('field7', 0)),
-                'K': float(data.get('field8', 0)),
-                'humidity': float(data.get('field9', 50)),  # Adding humidity
+                'ph': safe_float(data.get('field2'), 7),
+                'moisture': safe_float(data.get('field3'), 40),
+                'temperature': safe_float(data.get('field4'), 25),
+                'ec': safe_float(data.get('field5'), 0),
+                'N': safe_float(data.get('field6'), 0),
+                'P': safe_float(data.get('field7'), 0),
+                'K': safe_float(data.get('field8'), 0),
+                'humidity': safe_float(data.get('field9'), 50),  # Adding humidity
                 'timestamp': datetime.now().isoformat()
             }
             
@@ -429,32 +397,40 @@ def landing():
 def login():
     error = None
     if request.method == "POST":
-        username = request.form.get("username", "").strip()
-        password = request.form.get("password", "")
-        device_id = request.form.get("device_id", "").strip()
-        if authenticate_user(username, password, device_id):
-            session["username"] = username
-            session["device_id"] = device_id
-            return redirect(url_for("dashboard"))
-        else:
-            error = "Invalid username, password, or device ID. Please try again."
+        try:
+            username = request.form.get("username", "").strip()
+            password = request.form.get("password", "")
+            device_id = request.form.get("device_id", "").strip()
+            if authenticate_user(username, password, device_id):
+                session["username"] = username
+                session["device_id"] = device_id
+                return redirect(url_for("dashboard"))
+            else:
+                error = "Invalid username, password, or device ID. Please try again."
+        except Exception as e:
+            print("Login error:", e)
+            error = "An internal error occurred. Please try again later."
     return render_template("login.html", error=error)
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
     error = None
     if request.method == "POST":
-        username = request.form.get("username", "").strip()
-        password = request.form.get("password", "")
-        device_id = request.form.get("device_id", "").strip()
-        if not is_valid_device_id(device_id):
-            error = "Invalid or already registered Device ID. Please check your device ID."
-        else:
-            success, err = register_user(username, password, device_id)
-            if success:
-                return redirect(url_for("login"))
+        try:
+            username = request.form.get("username", "").strip()
+            password = request.form.get("password", "")
+            device_id = request.form.get("device_id", "").strip()
+            if not is_valid_device_id(device_id):
+                error = "Invalid or already registered Device ID. Please check your device ID."
             else:
-                error = f"Registration failed: {err}"
+                success, err = register_user(username, password, device_id)
+                if success:
+                    return redirect(url_for("login"))
+                else:
+                    error = f"Registration failed: {err}"
+        except Exception as e:
+            print("Registration error:", e)
+            error = "An internal error occurred. Please try again later."
     return render_template("register.html", error=error)
 
 @app.route("/dashboard")
@@ -588,6 +564,59 @@ def receive_device_data():
     # TODO: Validate device_id, save to database, etc.
     print(f"Received data from {device_id}: {data}")
     return jsonify({"status": "success"})
+
+def is_valid_device_id(device_id):
+    return devices_col.find_one({"device_id": device_id, "registered": False}) is not None
+
+def register_user(username, password, device_id):
+    password_hash = generate_password_hash(password)
+    try:
+        users_col.insert_one({
+            "username": username,
+            "password_hash": password_hash,
+            "device_id": device_id
+        })
+        devices_col.update_one({"device_id": device_id}, {"$set": {"registered": True}})
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+def authenticate_user(username, password, device_id):
+    user = users_col.find_one({"username": username, "device_id": device_id})
+    if user and check_password_hash(user['password_hash'], password):
+        return True
+    return False
+
+@app.route('/api/register', methods=['POST'])
+def api_register():
+    try:
+        data = request.get_json()
+        username = data.get('username', '').strip()
+        password = data.get('password', '')
+        device_id = data.get('device_id', '').strip()
+        if not is_valid_device_id(device_id):
+            return jsonify({'success': False, 'message': 'Invalid or already registered Device ID'}), 400
+        success, err = register_user(username, password, device_id)
+        if success:
+            return jsonify({'success': True, 'message': 'Registration successful'})
+        else:
+            return jsonify({'success': False, 'message': f'Registration failed: {err}'}), 400
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Internal server error: {str(e)}'}), 500
+
+@app.route('/api/login', methods=['POST'])
+def api_login():
+    try:
+        data = request.get_json()
+        username = data.get('username', '').strip()
+        password = data.get('password', '')
+        device_id = data.get('device_id', '').strip()
+        if authenticate_user(username, password, device_id):
+            return jsonify({'success': True, 'message': 'Login successful', 'username': username, 'device_id': device_id})
+        else:
+            return jsonify({'success': False, 'message': 'Invalid username, password, or device ID'}), 401
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Internal server error: {str(e)}'}), 500
 
 app = app
 
