@@ -11,6 +11,7 @@ from sklearn.preprocessing import LabelEncoder
 from dotenv import load_dotenv
 from werkzeug.security import generate_password_hash, check_password_hash
 from pymongo import MongoClient
+import secrets
 
 # Load environment variables from .env (only for local development)
 load_dotenv()
@@ -25,18 +26,8 @@ app.secret_key = os.environ.get('SECRET_KEY')
 if not app.secret_key:
     raise RuntimeError('SECRET_KEY environment variable not set!')
 
-# Temporary storage for sensor data
-sensor_data = {}
-
-# ThingSpeak Configuration using environment variables (secured)
-THINGSPEAK_API_KEY = os.environ.get("THINGSPEAK_API_KEY", "")
-THINGSPEAK_CHANNEL_ID = os.environ.get("THINGSPEAK_CHANNEL_ID", "")
-THINGSPEAK_READ_KEY = os.environ.get("THINGSPEAK_READ_KEY", "")
-THINGSPEAK_WRITE_KEY = os.environ.get("THINGSPEAK_WRITE_KEY", "")
-
-# Confirm environment variable loading
-if not all([THINGSPEAK_API_KEY, THINGSPEAK_CHANNEL_ID, THINGSPEAK_READ_KEY, THINGSPEAK_WRITE_KEY]):
-    print("⚠️ Warning: One or more ThingSpeak environment variables are missing.")
+# Store sensor data per device_id
+sensor_data = {}  # device_id -> latest data dict
 
 # Hardcoded valid device IDs (replace with DB or CSV as needed)
 VALID_DEVICE_IDS = {"ABC123", "DEF456", "GHI789", "JKL012", "MNO345"}
@@ -46,6 +37,7 @@ client = MongoClient(MONGO_URI)
 db = client['terradetect']
 users_col = db['users']
 devices_col = db['device_ids']
+sensor_data_col = db['sensor_data']
 
 def load_models():
     """Load all required models and data"""
@@ -85,126 +77,101 @@ def load_models():
 # Load models at startup
 models = load_models()
 
-def fetch_thingspeak_data():
-    """Fetch data from ThingSpeak channel"""
-    try:
-        # Make ThingSpeak Field 1 high to read data (command line)
-        requests.get(f"https://api.thingspeak.com/update?api_key={THINGSPEAK_WRITE_KEY}&field1=1")
-        
-        # Wait a moment for the command to take effect
-        import time
-        time.sleep(1)
-        
-        # Fetch the latest data from ThingSpeak
-        url = f"https://api.thingspeak.com/channels/{THINGSPEAK_CHANNEL_ID}/feeds/last.json?api_key={THINGSPEAK_READ_KEY}"
-        response = requests.get(url)
-        
-        if response.status_code == 200:
-            data = response.json()
-            
-            def safe_float(val, default):
-                try:
-                    return float(val)
-                except (TypeError, ValueError):
-                    return default
-            
-            # Map ThingSpeak fields to sensor data
-            # Adjust field numbers based on your ThingSpeak channel configuration
-            sensor_values = {
-                'ph': safe_float(data.get('field2'), 7),
-                'moisture': safe_float(data.get('field3'), 40),
-                'temperature': safe_float(data.get('field4'), 25),
-                'ec': safe_float(data.get('field5'), 0),
-                'N': safe_float(data.get('field6'), 0),
-                'P': safe_float(data.get('field7'), 0),
-                'K': safe_float(data.get('field8'), 0),
-                'humidity': safe_float(data.get('field9'), 50),  # Adding humidity
-                'timestamp': datetime.now().isoformat()
-            }
-            
-            # Update global sensor data
-            sensor_data.update(sensor_values)
-            
-            return {
-                "status": "success",
-                "message": "Data fetched from ThingSpeak",
-                "data": sensor_values
-            }
-        else:
-            return {
-                "status": "error",
-                "message": f"Failed to fetch data: HTTP {response.status_code}"
-            }
-            
-    except Exception as e:
-        return {
-            "status": "error",
-            "message": f"Error fetching ThingSpeak data: {str(e)}"
-        }
-
 @app.route('/api/esp32', methods=['POST'])
 def receive_esp32_data():
-    """Endpoint for ESP32 to send sensor data (legacy support)"""
+    """Endpoint for ESP32 to send sensor data (with API key authorization)"""
     try:
+        api_key = request.headers.get('x-api-key')
         data = request.get_json()
-        
+        device_id = data.get('device_id')
+        if not device_id:
+            return jsonify({"error": "Missing device_id"}), 400
+        # Validate API key for this device_id
+        device = devices_col.find_one({"device_id": device_id})
+        if not device or device.get("api_key") != api_key:
+            return jsonify({"error": "Unauthorized: Invalid API key for device_id"}), 401
         # Validate required fields
         required_fields = ['temperature', 'ph', 'humidity']
         if not all(field in data for field in required_fields):
             return jsonify({"error": "Missing required sensor fields"}), 400
-        
-        # Store sensor data
-        sensor_data.update({
+        # Prepare sensor data document
+        sensor_doc = {
+            'device_id': device_id,
             'temperature': float(data['temperature']),
             'ph': float(data['ph']),
             'humidity': float(data['humidity']),
-            'ec': float(data.get('ec', 0)),  # Added Electrical Conductivity
+            'ec': float(data.get('ec', 0)),
             'N': float(data.get('N', 0)),
             'P': float(data.get('P', 0)),
             'K': float(data.get('K', 0)),
             'moisture': float(data.get('moisture', 40)),
-            'timestamp': datetime.now().isoformat()
-        })
-        
+            'timestamp': datetime.now()
+        }
+        result = sensor_data_col.insert_one(sensor_doc)
+        print(f"Inserted sensor_doc: {sensor_doc}")
+        inserted_doc = sensor_data_col.find_one({'_id': result.inserted_id})
+        print(f"Fetched inserted_doc: {inserted_doc}")
+        if inserted_doc and '_id' in inserted_doc:
+            del inserted_doc['_id']
+        if inserted_doc and 'device_id' in inserted_doc:
+            del inserted_doc['device_id']
+        # Also update in-memory latest for compatibility
+        sensor_data[device_id] = {k: v for k, v in sensor_doc.items() if k != 'device_id'}
+        response_data = {k: v for k, v in sensor_data[device_id].items() if k != 'timestamp'}
         return jsonify({
-            "status": "success", 
+            "status": "success",
             "message": "Sensor data received",
-            "data": {k: v for k, v in sensor_data.items() if k != 'timestamp'}
+            "data": inserted_doc or response_data
         })
-    
     except Exception as e:
+        print(f"Error in /api/esp32: {e}")
         return jsonify({"error": str(e)}), 500
-    
-@app.route('/api/thingspeak/fetch', methods=['GET'])
-def fetch_data_from_thingspeak():
-    """Endpoint to fetch data from ThingSpeak"""
-    result = fetch_thingspeak_data()
-    return jsonify(result)
 
-@app.route("/api/thingspeak/trigger", methods=["POST"])
-def trigger_field1_high():
-    url = "https://api.thingspeak.com/update"
-    payload = {
-        "api_key": THINGSPEAK_WRITE_KEY,   # use your ThingSpeak Write API Key
-        "field1": 1                 # setting field1 HIGH (true)
-    }
-
-    response = requests.post(url, params=payload)
-    return jsonify({"status": "triggered", "response": response.text})
-
-    
 @app.route('/api/sensor/latest', methods=['GET'])
 def get_latest_sensor_data():
-    """Endpoint to fetch latest sensor data (from ThingSpeak or direct ESP32)"""
-    if not sensor_data:
-        result = fetch_thingspeak_data()
-        if result["status"] == "error":
-            return jsonify({"error": "No sensor data available"}), 404
-    
+    """Endpoint to fetch latest sensor data for the logged-in user's device_id from DB"""
+    device_id = session.get('device_id')
+    if not device_id:
+        return jsonify({"error": "No sensor data available for your device"}), 404
+    doc = sensor_data_col.find_one({'device_id': device_id}, sort=[('timestamp', -1)])
+    if not doc:
+        return jsonify({"error": "No sensor data available for your device"}), 404
+    # Remove MongoDB _id and device_id from response
+    doc.pop('_id', None)
+    doc.pop('device_id', None)
     return jsonify({
-        "data": {k: v for k, v in sensor_data.items() if k != 'timestamp'},
-        "timestamp": sensor_data.get('timestamp', datetime.now().isoformat()),
-        "source": "thingspeak" if "thingspeak" in sensor_data.get('source', '') else "esp32"
+        "data": {k: v for k, v in doc.items() if k != 'timestamp'},
+        "timestamp": doc.get('timestamp', datetime.now().isoformat()),
+        "source": "esp32"
+    })
+
+@app.route('/api/sensor/history', methods=['GET'])
+def get_sensor_history():
+    """Endpoint to fetch paginated sensor data for the logged-in user's device_id from DB"""
+    device_id = session.get('device_id')
+    if not device_id:
+        return jsonify({"error": "No sensor data available for your device"}), 404
+    try:
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 10))
+        if page < 1: page = 1
+        if per_page < 1: per_page = 10
+    except Exception:
+        page = 1
+        per_page = 10
+    skip = (page - 1) * per_page
+    total = sensor_data_col.count_documents({'device_id': device_id})
+    cursor = sensor_data_col.find({'device_id': device_id}, sort=[('timestamp', -1)]).skip(skip).limit(per_page)
+    history = []
+    for doc in cursor:
+        doc.pop('_id', None)
+        doc.pop('device_id', None)
+        history.append(doc)
+    return jsonify({
+        "history": history,
+        "total": total,
+        "page": page,
+        "per_page": per_page
     })
 
 def calculate_suitability(user_input, crop_name):
@@ -389,6 +356,8 @@ def generate_application_advice(fertilizer, crop_name=None):
     
     return advice or "Apply according to standard practices for your region."
 
+# Remove generate_api_key and create_device_id functions from this file
+
 @app.route("/")
 def landing():
     return render_template("landing.html")
@@ -425,7 +394,10 @@ def register():
             else:
                 success, err = register_user(username, password, device_id)
                 if success:
-                    return redirect(url_for("login"))
+                    # Fetch the api_key for this device_id
+                    device = devices_col.find_one({"device_id": device_id})
+                    api_key = device.get("api_key") if device else None
+                    return render_template("register_success.html", device_id=device_id, api_key=api_key)
                 else:
                     error = f"Registration failed: {err}"
         except Exception as e:
@@ -438,9 +410,9 @@ def dashboard():
     device_id = session.get("device_id")
     if not device_id:
         return redirect(url_for("login"))
-    # Fetch data for this device (for now, just fetch from ThingSpeak as before)
-    result = fetch_thingspeak_data()
-    return render_template("index.html", device_id=device_id, sensor_data=result.get("data", {}))
+    # Only pass this user's device's data
+    user_sensor_data = sensor_data.get(device_id, {})
+    return render_template("index.html", device_id=device_id, sensor_data=user_sensor_data)
 
 @app.route("/software")
 def software_only():
@@ -458,8 +430,8 @@ def predict():
 
         if use_sensor_data:
             # Try to fetch fresh data from ThingSpeak
-            if not sensor_data or (datetime.now() - datetime.fromisoformat(sensor_data.get('timestamp', '2000-01-01'))).total_seconds() > 300:
-                fetch_thingspeak_data()
+            # if not sensor_data or (datetime.now() - datetime.fromisoformat(sensor_data.get('timestamp', '2000-01-01'))).total_seconds() > 300:
+            #     fetch_thingspeak_data() # This line is removed
             parameters = [
                 sensor_data.get("N", 0),
                 sensor_data.get("P", 0),
@@ -565,6 +537,13 @@ def receive_device_data():
     print(f"Received data from {device_id}: {data}")
     return jsonify({"status": "success"})
 
+@app.route('/api/check_device_id', methods=['POST'])
+def check_device_id():
+    data = request.get_json()
+    device_id = data.get('device_id', '').strip()
+    device = devices_col.find_one({"device_id": device_id, "registered": True})
+    return jsonify({"registered": bool(device)})
+
 def is_valid_device_id(device_id):
     return devices_col.find_one({"device_id": device_id, "registered": False}) is not None
 
@@ -617,6 +596,14 @@ def api_login():
             return jsonify({'success': False, 'message': 'Invalid username, password, or device ID'}), 401
     except Exception as e:
         return jsonify({'success': False, 'message': f'Internal server error: {str(e)}'}), 500
+
+@app.route('/history')
+def history_page():
+    device_id = session.get('device_id')
+    username = session.get('username')
+    if not device_id or not username:
+        return redirect(url_for('login'))
+    return render_template('history.html', device_id=device_id, username=username)
 
 app = app
 

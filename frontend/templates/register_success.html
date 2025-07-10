@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Registration Successful</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container" style="margin-top: 3rem; max-width: 600px;">
+        <h2>Registration Successful!</h2>
+        <p>Your device has been registered successfully.</p>
+        <div style="background: #f8f8f8; padding: 1.5rem; border-radius: 8px; margin: 1.5rem 0;">
+            <strong>Device ID:</strong> <span style="font-family: monospace;">{{ device_id }}</span><br>
+            <strong>API Key:</strong> <span style="font-family: monospace; word-break: break-all;">{{ api_key }}</span>
+        </div>
+        <p><b>Important:</b> Please copy and save this API key. You will need to enter it into your ESP-32 firmware for secure communication.</p>
+        <a href="/login" class="btn">Go to Login</a>
+    </div>
+</body>
+</html> 

@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sensor Data History - TerraDetect</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    body {
+      font-family: 'Poppins', sans-serif;
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      background-color: #f5f5f5;
+    }
+
+    .main-header {
+      min-height: 48px;
+      padding: 0.3rem 0.7rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      background-color: #4CAF50;
+      color: white;
+    }
+
+    .main-header .logo {
+      height: 2.2rem;
+      width: 2.2rem;
+    }
+
+    .header-center h1 {
+      font-size: 1.3rem;
+      margin: 0;
+    }
+
+    .container {
+      width: 100%;
+      max-width: none;
+      padding: 1rem;
+      box-sizing: border-box;
+      margin: 0 auto;
+    }
+
+    #historyTableContainer {
+      width: 100%;
+      background: white;
+      border-radius: 8px;
+      padding: 1rem;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      overflow-x: auto;
+    }
+
+    .styled-table {
+      width: 100%;
+      font-size: 0.98rem;
+      border-collapse: collapse;
+      min-width: 800px;
+    }
+
+    .styled-table thead th {
+      background: #f0f0f0;
+      padding: 0.6rem;
+      text-align: left;
+      white-space: nowrap;
+      border-bottom: 1px solid #ccc;
+    }
+
+    .styled-table tbody td {
+      padding: 0.6rem;
+      border-bottom: 1px solid #eee;
+    }
+
+    .btn {
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      padding: 0.5rem 1rem;
+      cursor: pointer;
+      border-radius: 4px;
+      font-size: 0.95rem;
+      text-decoration: none;
+    }
+
+    .btn:hover {
+      background-color: #45a049;
+    }
+
+    #paginationControls {
+      margin-top: 1rem;
+      display: flex;
+      justify-content: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    footer {
+      margin-top: 2rem;
+      text-align: center;
+      color: #888;
+      font-size: 0.95rem;
+    }
+
+    @media (max-width: 768px) {
+      .main-header {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+      }
+
+      .header-center {
+        order: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0.5rem 0;
+      }
+
+      .header-right {
+        order: 2;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.3rem;
+        margin-bottom: 0.5rem;
+      }
+
+      .container h2 {
+        font-size: 1.15rem;
+        text-align: center;
+      }
+
+      .btn {
+        font-size: 0.9rem;
+        padding: 0.4rem 0.8rem;
+      }
+
+      .styled-table {
+        font-size: 0.89rem;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <header class="main-header">
+    <div style="flex:1;"></div>
+    <div class="header-center" style="flex:2;">
+      <img src="{{ url_for('static', filename='images/td-icon.jpg') }}" alt="TerraDetect Logo" class="logo" />
+      <h1>TerraDetect</h1>
+    </div>
+    <div class="header-right" style="flex:1;">
+      {% if session.username %}
+        <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="User Avatar"
+             style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover; box-shadow: 0 1px 4px rgba(0,0,0,0.08);" />
+        <a href="/logout" class="btn" style="margin-left:auto;">Logout</a>
+      {% endif %}
+    </div>
+  </header>
+
+  <div class="container">
+    <h2>Sensor Data History</h2>
+    <button onclick="window.location.href='/dashboard'" class="btn" style="margin-bottom: 1rem;">&larr; Go Back</button>
+
+    <div id="historyTableContainer">
+      <table id="historyTable" class="styled-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Timestamp</th>
+            <th>Temperature (°C)</th>
+            <th>Humidity (%)</th>
+            <th>pH</th>
+            <th>N</th>
+            <th>P</th>
+            <th>K</th>
+            <th>Moisture (%)</th>
+            <th>EC (μS/cm)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- History rows inserted here by JS -->
+        </tbody>
+      </table>
+      <div id="paginationControls"></div>
+    </div>
+  </div>
+
+  <footer>
+    <p>&copy; {{ 2024 }} TerraDetect. All rights reserved.</p>
+  </footer>
+
+  <script>
+    let currentPage = 1;
+    const perPage = 10;
+
+    function fetchAndRenderHistory(page = 1) {
+      fetch(`/api/sensor/history?page=${page}&per_page=${perPage}`)
+        .then(res => res.json())
+        .then(result => {
+          const table = document.getElementById("historyTable").getElementsByTagName('tbody')[0];
+          table.innerHTML = "";
+          if (!result.history || result.history.length === 0) {
+            table.innerHTML = '<tr><td colspan="10">No history data available.</td></tr>';
+          } else {
+            result.history.forEach((entry, idx) => {
+              const row = table.insertRow();
+              row.insertCell().textContent = (result.total - ((result.page-1)*result.per_page) - idx);
+              row.insertCell().textContent = entry.timestamp ? new Date(entry.timestamp).toLocaleString() : "-";
+              row.insertCell().textContent = entry.temperature ?? "-";
+              row.insertCell().textContent = entry.humidity ?? "-";
+              row.insertCell().textContent = entry.ph ?? "-";
+              row.insertCell().textContent = entry.N ?? "-";
+              row.insertCell().textContent = entry.P ?? "-";
+              row.insertCell().textContent = entry.K ?? "-";
+              row.insertCell().textContent = entry.moisture ?? "-";
+              row.insertCell().textContent = entry.ec ?? "-";
+            });
+          }
+          renderPagination(result.page, result.per_page, result.total);
+        })
+        .catch(() => {
+          const table = document.getElementById("historyTable").getElementsByTagName('tbody')[0];
+          table.innerHTML = '<tr><td colspan="10">Failed to load history data.</td></tr>';
+          renderPagination(1, perPage, 0);
+        });
+    }
+
+    function renderPagination(page, perPage, total) {
+      const controls = document.getElementById("paginationControls");
+      controls.innerHTML = "";
+      const totalPages = Math.ceil(total / perPage);
+      if (totalPages <= 1) return;
+
+      const prevBtn = document.createElement("button");
+      prevBtn.textContent = "Previous";
+      prevBtn.className = "btn";
+      prevBtn.disabled = page <= 1;
+      prevBtn.onclick = () => {
+        if (page > 1) {
+          currentPage = page - 1;
+          fetchAndRenderHistory(currentPage);
+        }
+      };
+      controls.appendChild(prevBtn);
+
+      const pageInfo = document.createElement("span");
+      pageInfo.textContent = ` Page ${page} of ${totalPages} `;
+      controls.appendChild(pageInfo);
+
+      const nextBtn = document.createElement("button");
+      nextBtn.textContent = "Next";
+      nextBtn.className = "btn";
+      nextBtn.disabled = page >= totalPages;
+      nextBtn.onclick = () => {
+        if (page < totalPages) {
+          currentPage = page + 1;
+          fetchAndRenderHistory(currentPage);
+        }
+      };
+      controls.appendChild(nextBtn);
+    }
+
+    document.addEventListener("DOMContentLoaded", function() {
+      fetchAndRenderHistory(currentPage);
+    });
+  </script>
+</body>
+</html>

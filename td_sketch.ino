@@ -11,9 +11,10 @@
 #include <WiFiClientSecure.h>
 
 // WiFi and ThingSpeak settings
-const char *write_apiKey = "U8APYGOIS38JY8SU";
-const char *read_apiKey = "ZGSNHEY6VC3URKUH";
-const int channelID = 2899894;
+// Remove ThingSpeak settings
+// const char *write_apiKey = "U8APYGOIS38JY8SU";
+// const char *read_apiKey = "ZGSNHEY6VC3URKUH";
+// const int channelID = 2899894;
 
 // Sensor Pins
 const int pH_sensor_pin = 39;
@@ -44,7 +45,7 @@ uint8_t NPK_slave_address = 0x13;
 #define DEVICE_ID_LENGTH 7
 char device_id[DEVICE_ID_LENGTH] = "000000";
 
-#define API_KEY "YOUR_SUPER_SECRET_KEY"
+#define API_KEY "8300856b04b7d84043ff65c773ff701ebf8372e0a426e74d1b39c0a0c6646803"
 
 void saveDeviceID(const char *id)
 {
@@ -66,6 +67,18 @@ void loadDeviceID()
   }
   device_id[DEVICE_ID_LENGTH - 1] = '\0';
   EEPROM.end();
+}
+
+bool validateDeviceID(const char* device_id) {
+  if (WiFi.status() != WL_CONNECTED) return false;
+  HTTPClient http;
+  http.begin("https://terradetect.onrender.com/api/check_device_id");
+  http.addHeader("Content-Type", "application/json");
+  String payload = "{\"device_id\":\"" + String(device_id) + "\"}";
+  int httpResponseCode = http.POST(payload);
+  String response = http.getString();
+  http.end();
+  return (httpResponseCode == 200 && response.indexOf("\"registered\":true") != -1);
 }
 
 void setupWiFi()
@@ -179,27 +192,28 @@ float updateEMA(float prev, float curr)
   return alpha * curr + (1 - alpha) * prev;
 }
 
-void sendToThingSpeak(float pH, float moisture, float temp, float EC, float N, float P, float K)
-{
-  WiFiClient client;
-  if (client.connect("api.thingspeak.com", 80))
-  {
-    String postStr = "api_key=" + String(write_apiKey) + "&field1=" + String(device_id) + "&field2=" + String(pH, 2) + "&field3=" + String(moisture, 1) + "&field4=" + String(temp, 2) + "&field5=" + String(EC, 2) + "&field6=" + String(N, 2) + "&field7=" + String(P, 2) + "&field8=" + String(K, 2);
-    client.println("POST /update HTTP/1.1");
-    client.println("Host: api.thingspeak.com");
-    client.println("Content-Type: application/x-www-form-urlencoded");
-    client.print("Content-Length: ");
-    client.println(postStr.length());
-    client.println("Connection: close");
-    client.println();
-    client.print(postStr);
-    while (client.connected() || client.available())
-      if (client.available())
-        client.readStringUntil('\n');
-    client.stop();
-  }
-  delay(20000);
-}
+// Remove ThingSpeak settings
+// void sendToThingSpeak(float pH, float moisture, float temp, float EC, float N, float P, float K)
+// {
+//   WiFiClient client;
+//   if (client.connect("api.thingspeak.com", 80))
+//   {
+//     String postStr = "api_key=" + String(write_apiKey) + "&field1=" + String(device_id) + "&field2=" + String(pH, 2) + "&field3=" + String(moisture, 1) + "&field4=" + String(temp, 2) + "&field5=" + String(EC, 2) + "&field6=" + String(N, 2) + "&field7=" + String(P, 2) + "&field8=" + String(K, 2);
+//     client.println("POST /update HTTP/1.1");
+//     client.println("Host: api.thingspeak.com");
+//     client.println("Content-Type: application/x-www-form-urlencoded");
+//     client.print("Content-Length: ");
+//     client.println(postStr.length());
+//     client.println("Connection: close");
+//     client.println();
+//     client.print(postStr);
+//     while (client.connected() || client.available())
+//       if (client.available())
+//         client.readStringUntil('\n');
+//     client.stop();
+//   }
+//   delay(20000);
+// }
 
 void sendToServer(float pH, float moisture, float temp, float EC, float N, float P, float K)
 {
@@ -213,18 +227,15 @@ void sendToServer(float pH, float moisture, float temp, float EC, float N, float
       WiFiClientSecure client;
       client.setInsecure();
       HTTPClient http;
-      http.begin(client, "https://terradetect.onrender.com/api/device_data");
+      http.begin(client, "https://terradetect.onrender.com/api/esp32");
       http.addHeader("Content-Type", "application/json");
-      http.addHeader("x-api-key", API_KEY);
-      // Get timestamp (epoch seconds)
-      time_t now;
-      time(&now);
+      // Compose JSON payload as expected by backend, including device_id
       String payload = "{";
       payload += "\"device_id\":\"" + String(device_id) + "\",";
-      payload += "\"timestamp\":" + String((unsigned long)now) + ",";
-      payload += "\"ph\":" + String(pH, 2) + ",";
-      payload += "\"moisture\":" + String(moisture, 1) + ",";
       payload += "\"temperature\":" + String(temp, 2) + ",";
+      payload += "\"ph\":" + String(pH, 2) + ",";
+      payload += "\"humidity\":" + String(moisture, 1) + ","; // Use moisture as humidity if no separate sensor
+      payload += "\"moisture\":" + String(moisture, 1) + ",";
       payload += "\"ec\":" + String(EC, 2) + ",";
       payload += "\"N\":" + String(N, 2) + ",";
       payload += "\"P\":" + String(P, 2) + ",";
@@ -274,6 +285,14 @@ void setup()
   sensors.begin();
   setupWiFi();
 
+  // Validate device ID with backend before proceeding
+  if (!validateDeviceID(device_id)) {
+    Serial.println("Device ID not registered. Resetting WiFiManager...");
+    WiFiManager wifiManager;
+    wifiManager.resetSettings();
+    ESP.restart();
+  }
+
   esp_task_wdt_init(10, true);
   esp_task_wdt_add(NULL);
 
@@ -316,9 +335,10 @@ void loop()
     esp_task_wdt_reset();
   }
 
-  sendToThingSpeak(emaPH, emaMoisture, emaTemp, emaEC, emaN_scaled, emaP_scaled, emaK_scaled);
+  // Remove sendToThingSpeak call
+  // sendToThingSpeak(emaPH, emaMoisture, emaTemp, emaEC, emaN_scaled, emaP_scaled, emaK_scaled);
   sendToServer(emaPH, emaMoisture, emaTemp, emaEC, emaN_scaled, emaP_scaled, emaK_scaled);
   digitalWrite(LED_PIN, LOW);
 
-  esp_deep_sleep(5 * 60 * 1000000); // Sleep for 5 minutes
+  delay(60000); // Wait 1 minute before next reading
 }
