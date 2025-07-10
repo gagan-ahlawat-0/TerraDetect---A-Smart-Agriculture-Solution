@@ -1,53 +1,135 @@
-# TerraDetect IoT Platform
+# 🌱 TerraDetect – A Smart Agriculture Solution
 
-## Overview
-TerraDetect is a secure, user/device-authenticated IoT agriculture platform. It consists of:
-- ESP32-based sensor device (firmware)
-- Flask backend (API, authentication, data storage)
-- Web frontend (dashboard, history, user management)
+[![Live](https://img.shields.io/badge/Live-Demo-00C853?style=flat-square&logo=vercel&logoColor=white)](https://terradetect.onrender.com)
+[![Built with Flask](https://img.shields.io/badge/Built%20with-Flask-000?style=flat-square&logo=flask)](https://flask.palletsprojects.com/)
+[![Made with Python](https://img.shields.io/badge/Made%20with-Python-FFD43B?style=flat-square&logo=python&logoColor=blue)](https://python.org)
+[![ESP32](https://img.shields.io/badge/Hardware-ESP32-3C873A?style=flat-square&logo=esphome)](https://www.espressif.com/en/products/socs/esp32)
 
-## ESP32 Firmware Setup
-
-### Two-Factor Authentication (2FA) with Device ID
-- Each ESP32 is provisioned with a unique `PROVISIONED_DEVICE_ID` in the firmware.
-- On first boot or reset, the user connects to the ESP32's WiFiManager portal and enters the device ID.
-- The device only proceeds if the entered device ID matches the provisioned one **and** is validated by the backend.
-- This prevents unauthorized use and device spoofing.
-
-### Flashing and Provisioning
-1. Set your unique device ID in the sketch:
-   ```cpp
-   #define PROVISIONED_DEVICE_ID "YOUR_DEVICE_ID"
-   #define API_KEY "YOUR_API_KEY"
-   ```
-2. Flash the firmware to your ESP32.
-3. Power on the device. Connect to the WiFiManager AP (e.g., `TerraDetect-Setup`).
-4. Enter WiFi credentials and the device ID when prompted.
-5. The device will connect, validate the device ID, and begin sending data to the backend.
-
-### Testing
-- Use the Serial Monitor (115200 baud) to view connection, validation, and data transfer logs.
-- The device sends simulated sensor data every 60 seconds. Replace with real sensor code as needed.
-
-## Backend API
-- `/api/check_device_id` — Validates device ID (POST JSON: `{ "device_id": "..." }`)
-- `/api/esp32` — Accepts sensor data (POST JSON, requires `x-api-key` header)
-
-## Security Notes
-- Device ID and API key are required for all data submissions.
-- Device ID is checked both in firmware and backend for two-factor authentication.
-- Never share your API key or provisioned device ID publicly.
-
-## Project Structure
-- `backend/` — Flask app, models, requirements
-- `frontend/` — Web UI, static assets, templates
-- `esp32_terradetect.ino` — Main ESP32 firmware (see above)
-
-## For New Users
-1. Obtain a pre-provisioned ESP32 (with device ID and API key).
-2. Register on the web app and link your device.
-3. Power on the ESP32, connect it to WiFi, and enter the device ID.
-4. Use the dashboard and history features to view your device's data.
+> 🔗 **Live Demo**: [https://terradetect.onrender.com](https://terradetect.onrender.com)
 
 ---
-For more details, see code comments and the backend/frontend README files.
+
+TerraDetect is a smart farming assistant that combines real-time **soil monitoring**, **sensor-based data collection**, and **ML-powered crop & fertilizer recommendations**. It uses ESP32 microcontrollers to gather environmental data and a Flask web app to display and analyze this information.
+
+---
+
+## 🔧 Key Features
+
+### 🌐 Web Dashboard (Flask)
+- 📊 Visualize real-time & historical soil data
+- 🌾 Crop and fertilizer prediction using ML
+- 🌓 Dark mode UI with mobile responsiveness
+- 🔒 Secure API endpoints with JWT authentication
+
+### 🔌 IoT Integration (ESP32)
+- 📡 WiFiManager for dynamic setup
+- 🔐 User-entered 6-character Device ID (stored in EEPROM)
+- 📈 HTTPS sensor data uploads with API key validation
+- 🌿 Sensor support:
+  - Soil pH
+  - Moisture
+  - Temperature
+  - EC (Electrical Conductivity)
+  - NPK (via RS485 Modbus)
+
+---
+
+## 📁 Folder Structure
+
+```
+TerraDetect/
+├── esp32/                # ESP32 firmware & sensor integration
+├── static/               # CSS, JS, images
+├── templates/            # Jinja2 HTML templates
+├── models/               # Crop & fertilizer ML models
+├── utils/                # Utility scripts (auth, helpers)
+├── app.py                # Flask backend
+└── requirements.txt      # Python dependencies
+```
+
+---
+
+## 🚀 Getting Started
+
+### 🧰 Requirements
+- Python 3.9+
+- Flask, scikit-learn, pandas
+- ESP32-WROOM-32 (30-pin or 38-pin)
+- Arduino IDE / PlatformIO for flashing ESP32
+
+### ⚙️ Setup
+
+```bash
+# Clone the repo
+git clone https://github.com/gagan-ahlawat-0/TerraDetect---A-Smart-Agriculture-Solution.git
+cd TerraDetect---A-Smart-Agriculture-Solution
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run the Flask app
+python app.py
+```
+
+### 📡 Flashing ESP32
+
+- Open `esp32/` code in Arduino IDE
+- Upload to ESP32 board
+- On first boot:
+  - Connect to ESP32 AP
+  - Enter WiFi credentials + Device ID
+
+---
+
+## 🔐 Security
+
+- 🔑 HTTPS requests from ESP32 with API key
+- 🧠 Device identity stored in EEPROM
+- 🔒 JWT tokens for secure API access
+
+---
+
+## 📊 ML Prediction Modules
+
+- **Crop Recommendation**  
+  Based on NPK, pH, and other sensor values
+
+- **Fertilizer Suggestion**  
+  Trained on real-world datasets to identify soil deficiencies
+
+---
+
+## 🧑‍🌾 Use Cases
+
+- Farmers optimizing fertilizer use
+- Students building Agri-IoT projects
+- Researchers monitoring field soil health
+
+---
+
+## 🖼️ Preview
+
+![TerraDetect Dashboard](https://github.com/gagan-ahlawat-0/TerraDetect---A-Smart-Agriculture-Solution/blob/main/static/dashboard_darkmode.png)
+
+---
+
+## ⚙️ Tech Stack
+
+| Layer         | Tech Used                       |
+|---------------|----------------------------------|
+| Frontend      | HTML, CSS, JS, FontAwesome       |
+| Backend       | Python, Flask, REST APIs         |
+| ML            | Scikit-learn, Pandas, NumPy      |
+| IoT Hardware  | ESP32, RS485 NPK, analog sensors |
+| Auth & Security | JWT, API keys, EEPROM, HTTPS   |
+
+---
+
+## 📬 Contact
+
+Developed by [**Gagan Ahlawat**](https://github.com/gagan-ahlawat-0) and Team **TerraDetect**
+🔗 [https://terradetect.onrender.com](https://terradetect.onrender.com)
+
+Contributions, issues, and feature requests are welcome!
+
+---
