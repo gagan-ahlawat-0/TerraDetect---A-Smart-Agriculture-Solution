@@ -66,6 +66,11 @@ document.addEventListener("DOMContentLoaded", function () {
         return false;
       };
     }
+
+    const historyBtn = document.getElementById("historyBtn");
+    if (historyBtn) historyBtn.addEventListener("click", () => {
+      window.location.href = "/history";
+    });
   }
 
   function showMessage(msg) {
@@ -115,24 +120,8 @@ document.addEventListener("DOMContentLoaded", function () {
       fetchWeatherAPI();
     } else if (source === "sensor") {
       showLoading(true);
-      showMessage("Triggering sensors...");
-
-      fetch("/api/thingspeak/trigger", { method: "POST" })
-        .then((res) => res.json())
-        .then(() => {
-          showMessage("Waiting 150 seconds while sensor collects data...");
-
-          setTimeout(() => {
-            clearMessage();
-            fetchSensorData();
-          }, 150000); // 150 seconds
-        })
-        .catch((err) => {
-          showError("Failed to trigger sensor.");
-          clearMessage();
-          showLoading(false);
-          console.error(err);
-        });
+      showMessage("Fetching latest sensor data from device...");
+      fetchSensorData();
     }
   }
 
@@ -141,16 +130,16 @@ document.addEventListener("DOMContentLoaded", function () {
       elements.sensorDataSection.style.display = "none";
       showLoading(true);
 
-      const response = await fetch("/api/thingspeak/fetch");
+      const response = await fetch("/api/sensor/latest");
 
       if (!response.ok) {
-        throw new Error("Failed to fetch data from ThingSpeak");
+        throw new Error("Failed to fetch sensor data");
       }
 
       const result = await response.json();
 
-      if (result.status === "error") {
-        throw new Error(result.message);
+      if (result.error) {
+        throw new Error(result.error);
       }
 
       // Store the sensor data
@@ -567,6 +556,33 @@ document.addEventListener("DOMContentLoaded", function () {
     elements.form.reset();
     elements.resultContainer.style.display = "none";
     elements.errorContainer.style.display = "none";
+  }
+
+  async function fetchHistory() {
+    try {
+      showLoading(true);
+      const response = await fetch("/api/sensor/history?n=10");
+      if (!response.ok) throw new Error("Failed to fetch history");
+      const result = await response.json();
+      if (result.error) throw new Error(result.error);
+      renderHistory(result.history);
+    } catch (error) {
+      showError("Could not fetch history: " + error.message);
+    } finally {
+      showLoading(false);
+    }
+  }
+
+  function renderHistory(history) {
+    if (!history || history.length === 0) {
+      alert("No history data available.");
+      return;
+    }
+    let msg = "Last " + history.length + " sensor readings:\n\n";
+    history.forEach((entry, idx) => {
+      msg += `#${history.length - idx}: Temp: ${entry.temperature}, Humidity: ${entry.humidity}, pH: ${entry.ph}, N: ${entry.N}, P: ${entry.P}, K: ${entry.K}, Moisture: ${entry.moisture}, EC: ${entry.ec}, Time: ${entry.timestamp}\n`;
+    });
+    alert(msg);
   }
 
   // Global error handler for debugging

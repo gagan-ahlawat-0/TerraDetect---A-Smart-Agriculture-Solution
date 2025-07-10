@@ -74,7 +74,12 @@
           </button>
           {% if session.device_id %}
           <button class="sidebar-btn" id="sensorWeatherBtn">
-            <i class="fas fa-satellite-dish"></i> Fetch Sensors
+            <i class="fas fa-satellite-dish"></i> Fetch Sensor Data
+          </button>
+          {% endif %}
+          {% if session.device_id and session.username %}
+          <button class="sidebar-btn" id="historyBtn">
+            <i class="fas fa-history"></i> History
           </button>
           {% endif %}
         </div>
